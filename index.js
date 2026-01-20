@@ -4,6 +4,9 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const userRoutes = require('./routes/user.route.js');
 const photoRoutes = require('./routes/photo.route.js');
+const imageSourceRoutes = require('./routes/imageSource.routes.js');
+const AllowedEmail = require('./models/AllowedEmail.model.js');
+const { allowedEmails } = require('./config/allowedEmail.js');
 const cookieParser = require('cookie-parser');
 const passport = require('passport');
 const session = require('express-session');
@@ -24,10 +27,10 @@ app.use(cors({
   credentials: true,
 }));
 
-app.set('trust proxy', 1); 
+app.set('trust proxy', 1);
 
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback-secret-for-dev', 
+  secret: process.env.SESSION_SECRET || 'fallback-secret-for-dev',
   resave: false,
   saveUninitialized: false,
   proxy: true, // Required for Vercel
@@ -47,6 +50,24 @@ app.use(express.json());
 // Routes
 app.use('/users', userRoutes);
 app.use('/photos', photoRoutes);
+app.use('/api/image-sources', imageSourceRoutes);
+
+// Seed allowed emails if empty
+const seedAllowedEmails = async () => {
+  try {
+    const count = await AllowedEmail.countDocuments();
+    if (count === 0) {
+      console.log('Seeding allowed emails...');
+      for (const email of allowedEmails) {
+        await AllowedEmail.create({ email, addedBy: 'System' });
+      }
+      console.log('Seeding complete.');
+    }
+  } catch (error) {
+    console.error('Error seeding emails:', error);
+  }
+};
+seedAllowedEmails();
 
 // Google Auth
 app.get('/', (req, res) => {
