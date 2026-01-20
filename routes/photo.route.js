@@ -37,8 +37,12 @@ const {
   getPhotos,
   getImageDataById, // ✅ Import the new function
   getImageStatsByMonth,
-  getImagesByUploadedBy
+  getImagesByUploadedBy,
+  getOverviewStats
 } = require('../controllers/photo.controller');
+
+// ✅ GET OVERVIEW STATS FOR DASHBOARD
+router.get('/overview-stats', authMiddleware, getOverviewStats);
 
 const { authMiddleware } = require('../middlewares/authMiddleware');
 // ✅ SYNC IMAGES FROM DRIVE AND SAVE IN DB

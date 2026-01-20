@@ -276,6 +276,43 @@ const getImagesByUploadedBy = async (req, res) => {
   }
 };
 
+// ✅ NEW: Get Overview Statistics for Dashboard
+const getOverviewStats = async (req, res) => {
+  try {
+    const totalImages = await Image.countDocuments();
+    const totalSources = await AllowedEmail.countDocuments();
+    const geocodedCount = await Image.countDocuments({ latitude: { $ne: null }, longitude: { $ne: null } });
+
+    const topDistricts = await Image.aggregate([
+      { $match: { district: { $ne: "", $ne: null } } },
+      { $group: { _id: "$district", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 },
+      { $project: { district: "$_id", count: 1, _id: 0 } }
+    ]);
+
+    const recentPhotos = await Image.find()
+      .select('-imageData')
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    const activeUsers = await Image.distinct('uploadedBy');
+
+    res.status(200).json({
+      totalImages,
+      totalSources,
+      geocodedCount,
+      coverage: totalImages > 0 ? ((geocodedCount / totalImages) * 100).toFixed(1) : 0,
+      topDistricts,
+      recentPhotos,
+      activeUsersCount: activeUsers.length
+    });
+  } catch (err) {
+    console.error("❌ Error fetching overview stats:", err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // ✅ Deprecated static email functions. Use getImagesByUploadedBy instead.
 // I am keeping the generic one and removing the hardcoded ones.
 
@@ -287,5 +324,6 @@ module.exports = {
   getImageStatsByMonth,
   getImageStatsByYear,
   getImageStatsByDay,
-  getImagesByUploadedBy
+  getImagesByUploadedBy,
+  getOverviewStats
 };
