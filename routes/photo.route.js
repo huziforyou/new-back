@@ -41,10 +41,10 @@ const {
   getOverviewStats
 } = require('../controllers/photo.controller');
 
+const { authMiddleware } = require('../middlewares/authMiddleware');
+
 // ✅ GET OVERVIEW STATS FOR DASHBOARD
 router.get('/overview-stats', authMiddleware, getOverviewStats);
-
-const { authMiddleware } = require('../middlewares/authMiddleware');
 // ✅ SYNC IMAGES FROM DRIVE AND SAVE IN DB
 router.get('/sync-images', syncImages);
 
