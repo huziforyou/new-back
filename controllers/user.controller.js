@@ -271,13 +271,9 @@ const checkPermissions = async (req, res) => {
     const user = await User.findOne({ name: username });
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const filteredPermissions = (user.permissions || []).filter(
-      (perm) => perm !== 'Dashboard' && perm !== 'MyInfo'
-    );
-
     res.status(200).json({
       message: 'Access Granted Successfully',
-      permissions: filteredPermissions,
+      permissions: user.permissions || [],
     });
 
   } catch (err) {
