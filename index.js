@@ -76,7 +76,8 @@ app.get('/', (req, res) => {
   res.send('<a href="/auth/google">Continue With Google</a>');
 });
 
-app.get('/auth/google',
+app.get('/auth/google', (req, res, next) => {
+  const { redirect } = req.query;
   passport.authenticate('google', {
     scope: [
       'profile',
@@ -84,16 +85,29 @@ app.get('/auth/google',
       'https://www.googleapis.com/auth/drive.readonly'
     ],
     accessType: 'offline',
-    prompt: 'consent'
-  })
-);
+    prompt: 'select_account consent',
+    state: redirect ? Buffer.from(redirect).toString('base64') : undefined
+  })(req, res, next);
+});
 
-app.get('/gtoken',
+app.get('/gtoken', (req, res, next) => {
+  const { state } = req.query;
+  const redirectUrl = state ? Buffer.from(state, 'base64').toString('ascii') : `${process.env.FRONTEND_URL}/home`;
+
   passport.authenticate('google', {
     failureRedirect: `${process.env.FRONTEND_URL}/home`,
-    successRedirect: '/photos/sync-images', // must exist in photoRoutes
-  })
-);
+  }, (err, user, info) => {
+    if (err || !user) {
+      console.error("❌ OAuth Authentication failed:", err || info);
+      return res.redirect(`${process.env.FRONTEND_URL}/login`);
+    }
+    req.logIn(user, (loginErr) => {
+      if (loginErr) return next(loginErr);
+      // Redirect to sync endpoint but append the redirectUrl so it knows where to go after sync
+      res.redirect(`/photos/sync-images?redirect=${encodeURIComponent(redirectUrl)}`);
+    });
+  })(req, res, next);
+});
 
 app.get('/logout', (req, res, next) => {
   req.logout(err => {

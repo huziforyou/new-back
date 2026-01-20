@@ -44,8 +44,16 @@ const getPlaceDetails = async (lat, lng) => {
 
 // ✅ MODIFIED: Syncs Google Drive images directly to the database.
 const syncImages = async (req, res) => {
-  if (!req.isAuthenticated()) return res.status(401).send('Not authenticated');
+  console.log("🔄 Starting Sync Process...");
+  if (!req.isAuthenticated()) {
+    console.error("❌ Sync failed: User not authenticated");
+    return res.status(401).send('Not authenticated');
+  }
+
   const accessToken = req.user.accessToken;
+  const userEmail = req.user.email;
+  console.log(`👤 Syncing for user: ${userEmail}`);
+
   // Check for custom redirect URL in query
   const redirectUrl = req.query.redirect || `${process.env.FRONTEND_URL}/home`;
 
@@ -53,38 +61,49 @@ const syncImages = async (req, res) => {
     let files = [];
     let nextPageToken = null;
 
+    console.log("📂 Fetching files from Google Drive...");
     do {
-      const driveResponse = await axios.get('https://www.googleapis.com/drive/v3/files', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        params: {
-          q: "mimeType contains 'image/' and trashed=false",
-          fields: 'nextPageToken, files(id, name, mimeType, createdTime)',
-          pageToken: nextPageToken
-        }
-      });
-
-      files.push(...(driveResponse.data.files || []));
-      nextPageToken = driveResponse.data.nextPageToken;
+      try {
+        const driveResponse = await axios.get('https://www.googleapis.com/drive/v3/files', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          params: {
+            q: "mimeType contains 'image/' and trashed=false",
+            fields: 'nextPageToken, files(id, name, mimeType, createdTime)',
+            pageToken: nextPageToken
+          }
+        });
+        files.push(...(driveResponse.data.files || []));
+        nextPageToken = driveResponse.data.nextPageToken;
+      } catch (driveErr) {
+        console.error("❌ Error fetching file list from Drive:", driveErr.response?.data || driveErr.message);
+        break; // Stop fetching list on error
+      }
     } while (nextPageToken);
 
-    console.log(`✅ Total files fetched: ${files.length}`);
+    console.log(`✅ Total files found in Drive: ${files.length}`);
 
     // Get allowed emails from DB
     const allowedEmailDocs = await AllowedEmail.find();
     const allowedEmailsList = allowedEmailDocs.map(doc => doc.email.toLowerCase());
 
-    const uploaderEmail = req.user.email.toLowerCase();
+    // Check if the uploader is allowed (optional, but good for security)
+    if (!allowedEmailsList.includes(userEmail.toLowerCase())) {
+      console.warn(`⚠️ Warning: ${userEmail} is syncing but is not in the allowed emails list.`);
+    }
 
-    // Optional: Strictly enforce allowed list (Uncomment if needed)
-    // if (!allowedEmailsList.includes(uploaderEmail)) {
-    //    console.log(`User ${uploaderEmail} is not in allowed list.`);
-    // }
+    let processedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
 
     for (const file of files) {
       try {
         const exists = await Image.findOne({ fileId: file.id });
-        if (exists) continue;
+        if (exists) {
+          skippedCount++;
+          continue;
+        }
 
+        console.log(`⬇️ Downloading ${file.name} (${file.id})...`);
         // Download image from Google Drive into a buffer
         const imageBuffer = await downloadFileToBuffer(file.id, accessToken);
 
@@ -101,6 +120,8 @@ const syncImages = async (req, res) => {
               if (exifData.DateTimeOriginal) {
                 timestamp = new Date(exifData.DateTimeOriginal);
               }
+            } else {
+              console.log(`ℹ️ No EXIF data found for ${file.name}`);
             }
           }
         } catch (err) {
@@ -109,7 +130,10 @@ const syncImages = async (req, res) => {
 
         let placeDetails = { district: "", tehsil: "", village: "", country: "" };
         if (latitude && longitude) {
+          console.log(`📍 Geocoding ${latitude}, ${longitude}...`);
           placeDetails = await getPlaceDetails(latitude, longitude);
+        } else {
+          console.log(`⚠️ No GPS coordinates for ${file.name}`);
         }
 
         // Create a new document in the database with the image data
@@ -121,18 +145,22 @@ const syncImages = async (req, res) => {
           latitude,
           longitude,
           timestamp,
-          uploadedBy: uploaderEmail, // ✅ Store as lowercase
+          uploadedBy: userEmail.toLowerCase(), // ✅ Store as lowercase
           lastCheckedAt: new Date(),
           ...placeDetails
         });
+        processedCount++;
+        console.log(`✅ Saved ${file.name} to DB.`);
       } catch (fileErr) {
+        errorCount++;
         console.error(`❌ Error processing file ${file.name}:`, fileErr.message);
       }
     }
 
+    console.log(`🎉 Sync Completed. Processed: ${processedCount}, Skipped: ${skippedCount}, Errors: ${errorCount}`);
     res.redirect(redirectUrl);
   } catch (err) {
-    console.error('❌ Sync error:', err);
+    console.error('❌ Critical Sync error:', err);
     res.status(500).send('Failed to sync images');
   }
 };
@@ -213,28 +241,37 @@ const getImageStatsByDay = async (req, res) => {
 const getImagesByUploadedBy = async (req, res) => {
   try {
     const { uploadedBy } = req.params;
+    console.log(`🔎 Request to get images for: ${uploadedBy}`);
 
-    // 1. Check if user is authenticated
-    if (!req.isAuthenticated || !req.isAuthenticated()) {
+    // Check if user is authenticated (either via Passport session or JWT authMiddleware)
+    const user = req.user;
+    const isAuthenticated = (req.isAuthenticated && req.isAuthenticated()) || !!user;
+
+    if (!isAuthenticated) {
+      console.warn("🚫 Request denied: User not authenticated");
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const { user } = req;
+    console.log(`👤 Requesting user: ${user?.email} (Role: ${user?.role})`);
 
     // 2. Check permissions
     // Admin has access to everything.
     // Regular users must have the 'uploadedBy' email in their permissions.
     if (user.role !== 'admin') {
-      const hasPermission = user.permissions && user.permissions.includes(uploadedBy.toLowerCase());
+      const userPerms = (user.permissions || []).map(p => p.toLowerCase());
+      const hasPermission = userPerms.includes(uploadedBy.toLowerCase()) || user.email.toLowerCase() === uploadedBy.toLowerCase();
+
       if (!hasPermission) {
+        console.warn(`⛔ Access denied. User ${user.email} tried to view ${uploadedBy}`);
         return res.status(403).json({ error: 'Access denied: You do not have permission to view these images.' });
       }
     }
 
     const photos = await Image.find({ uploadedBy: uploadedBy.toLowerCase() }).select('-imageData');
+    console.log(`✅ Found ${photos.length} photos for ${uploadedBy}`);
     res.status(200).json({ photos });
   } catch (err) {
-    console.error("Error in getImagesByUploadedBy:", err);
+    console.error("❌ Error in getImagesByUploadedBy:", err);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

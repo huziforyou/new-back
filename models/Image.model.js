@@ -68,10 +68,10 @@ const ImageSchema = new mongoose.Schema({
   timestamp: { type: Date },
   uploadedBy: { type: String },
   lastCheckedAt: { type: Date },
-  // district: { type: String },
-  // tehsil: { type: String },
-  // village: { type: String },
-  // country: { type: String },
+  district: { type: String },
+  tehsil: { type: String },
+  village: { type: String },
+  country: { type: String },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Image', ImageSchema);

@@ -40,17 +40,18 @@ const {
   getImagesByUploadedBy
 } = require('../controllers/photo.controller');
 
+const { authMiddleware } = require('../middlewares/authMiddleware');
 // ✅ SYNC IMAGES FROM DRIVE AND SAVE IN DB
 router.get('/sync-images', syncImages);
 
 // ✅ GET ALL PHOTO METADATA (without the image data)
-router.get('/get-photos', getPhotos);
+router.get('/get-photos', authMiddleware, getPhotos);
 
 // ✅ NEW: GET IMAGE BINARY DATA BY ID (for use in <img> src attribute)
 router.get('/image-data/:id', getImageDataById);
 
 // ✅ STATS AND OTHER ROUTES
-router.get('/get-image-by-month', getImageStatsByMonth);
-router.get('/getImages/:uploadedBy', getImagesByUploadedBy);
+router.get('/get-image-by-month', authMiddleware, getImageStatsByMonth);
+router.get('/getImages/:uploadedBy', authMiddleware, getImagesByUploadedBy);
 
 module.exports = router;
