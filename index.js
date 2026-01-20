@@ -15,6 +15,10 @@ const Image = require('./models/Image.model.js');
 require('./auth/google.js');
 
 dotenv.config();
+// connectDB(); // Call this conditionally in routes or specific init functions if needed, but for Vercel, having it global is okay if it caches.
+// However, since we refactored db.js to return a promise, we should probably await it or let endpoints handle it.
+// For now, I will keep it global but inside a try-catch equivalent or just let it start async. 
+// Actually, with the new db.js, we can just call it.
 connectDB();
 
 const app = express();
@@ -52,22 +56,8 @@ app.use('/users', userRoutes);
 app.use('/photos', photoRoutes);
 app.use('/api/image-sources', imageSourceRoutes);
 
-// Seed allowed emails if empty
-const seedAllowedEmails = async () => {
-  try {
-    const count = await AllowedEmail.countDocuments();
-    if (count === 0) {
-      console.log('Seeding allowed emails...');
-      for (const email of allowedEmails) {
-        await AllowedEmail.create({ email, addedBy: 'System' });
-      }
-      console.log('Seeding complete.');
-    }
-  } catch (error) {
-    console.error('Error seeding emails:', error);
-  }
-};
-seedAllowedEmails();
+// Seed function removed for serverless compatibility.
+// If seeding is needed, create a dedicated admin endpoint.
 
 // Google Auth
 app.get('/', (req, res) => {
