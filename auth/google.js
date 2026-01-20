@@ -2,7 +2,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 require('dotenv').config();
 const axios = require('axios');
-const { allowedEmails } = require('../config/allowedEmail');
+// const { allowedEmails } = require('../config/allowedEmail');
 
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
@@ -18,18 +18,31 @@ passport.use(new GoogleStrategy({
             // ✅ Get email safely
             const email = profile.emails?.[0]?.value;
 
-            // ❌ You forgot to define `email` in your code before using it
-            if (!email || !allowedEmails.includes(email)) {
+            if (!email) {
+                return done(null, false, { message: 'No email found in Google profile' });
+            }
+
+            // ✅ Check against Database instead of hardcoded list
+            // const { AllowedEmail } = require('../models/AllowedEmail.model'); // If it was named export
+            const AllowedEmail = require('../models/AllowedEmail.model'); // It is default export
+
+            // We use case-insensitive check by storing/searching lowercase if model enforces it, 
+            // but the query here should be robust.
+            const allowedUser = await AllowedEmail.findOne({ email: email.toLowerCase() });
+
+            if (!allowedUser) {
+                console.log(`🚫 Access denied for: ${email}`);
                 return done(null, false, { message: 'Unauthorized email' });
             }
 
+            console.log(`✅ User authorized: ${email}`);
+
             // ✅ Optional: Fetch token info (you can keep or skip this)
-            const tokenInfo = await axios.get(`https://oauth2.googleapis.com/tokeninfo?access_token=${accessToken}`);
-       
+            // const tokenInfo = await axios.get(`https://oauth2.googleapis.com/tokeninfo?access_token=${accessToken}`);
 
             const user = {
                 displayName: profile.displayName,
-                email,
+                email: email.toLowerCase(), // Normalize
                 accessToken,
                 refreshToken
             };
