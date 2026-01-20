@@ -20,6 +20,10 @@ const connectDB = async () => {
       bufferCommands: false,
     };
 
+    if (!process.env.MONGO_URI) {
+      throw new Error('Please define the MONGO_URI environment variable inside .env.local');
+    }
+
     cached.promise = mongoose.connect(process.env.MONGO_URI, opts).then((mongoose) => {
       console.log(`MongoDB Connected: ${mongoose.connection.host}`);
       return mongoose;

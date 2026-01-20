@@ -25,6 +25,8 @@ const app = express();
 
 app.use(async (req, res, next) => {
   try {
+    console.log("Attempting to connect to DB...");
+    console.log("Environment Keys:", Object.keys(process.env));
     await connectDB();
     next();
   } catch (error) {
