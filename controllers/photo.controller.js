@@ -46,6 +46,8 @@ const getPlaceDetails = async (lat, lng) => {
 const syncImages = async (req, res) => {
   if (!req.isAuthenticated()) return res.status(401).send('Not authenticated');
   const accessToken = req.user.accessToken;
+  // Check for custom redirect URL in query
+  const redirectUrl = req.query.redirect || `${process.env.FRONTEND_URL}/home`;
 
   try {
     let files = [];
@@ -71,59 +73,15 @@ const syncImages = async (req, res) => {
     const allowedEmailDocs = await AllowedEmail.find();
     const allowedEmailsList = allowedEmailDocs.map(doc => doc.email.toLowerCase());
 
+    const uploaderEmail = req.user.email.toLowerCase();
+
+    // Optional: Strictly enforce allowed list (Uncomment if needed)
+    // if (!allowedEmailsList.includes(uploaderEmail)) {
+    //    console.log(`User ${uploaderEmail} is not in allowed list.`);
+    // }
+
     for (const file of files) {
       try {
-        // Filter by allowed emails if needed, although drive access is usually user specific.
-        // But the requirement implies we only want data from specific "mails" (users?).
-        // Wait, the previous code didn't filter by email in syncImages, it just used the logged-in user's accessToken.
-        // UNLESS the prompt implies the ADMIN adds emails that the SYSTEM should sync from?
-        // The user request says: "admin ka pass user management ma ake or section add ho gaya jis sa wo mails add ker saka jis sa data aya ga drive sa"
-        // (Admin adds a section to user management where they can add mails *from which data comes from drive*)
-        //
-        // IF the current flow is: Logged in user syncs THEIR OWN drive.
-        // AND the stored images are filtered by `uploadedBy`.
-        // AND the frontend had hardcoded pages for specific emails.
-        // THEN `syncImages` might be running for *whoever is logged in*.
-        //
-        // If the goal is that *ONLY* these whitelisted emails can upload/sync, we should check here.
-        // The previous code didn't seemingly check `uploadedBy` against a whitelist in `syncImages`, BUT `allowedEmail.js` existed.
-        // Let's check where `allowedEmail.js` was used.
-        // I grepped it and it was ONLY in `config/allowedEmail.js`... and NOT used in `photo.controller.js`!
-        // CHECK: `grep` output earlier showed `Backend/config/allowedEmail.js` match, but `photo.controller.js` match was only unrelated lines?
-        // Wait, `grep_search` output for `@gmail.com` showed `allowedEmail.js` but NOT `photo.controller.js` using it explicitly.
-        // However `photo.controller.js` imports it?
-        // NO, `view_file` of `photo.controller.js` (Step 15) shows NO import of `allowedEmail.js`.
-        // BUT it has functions `getFirstEmailImage` with hardcoded 'peenaykapani@gmail.com'.
-        // So the `syncImages` was allowing ANYONE with a valid token to sync?
-        // Or maybe only those users *can* login?
-        // The prompt says "is project ma google drive sa data a raha ha ab ... mana only 3 mails ka option daya hain jo ka mana static hi rakha hain".
-        // This implies the current system *relies* on these 3 static emails.
-        //
-        // If I look at `syncImages` (lines 43-123), it uses `req.user.accessToken` and `req.user.email`.
-        // It does NOT check if `req.user.email` is in the allowed list.
-        // So currently *anyone* who logs in can sync.
-        // BUT the *Display* was limited to those 3 emails via `getFirstEmailImage` etc.
-        //
-        // So the "Dynamic" part is mainly for *Displaying* images from these managed emails.
-        // AND potentially restricting who can sync?
-        // "mails add ker saka jis sa data aya ga drive sa" -> "add mails from which data comes from drive".
-        // Use case: Admin adds 'abc@gmail.com'. Now if 'abc@gmail.com' logs in and syncs, their data is shown in the "Dynamic" sections.
-        // If 'xyz@gmail.com' logs in and syncs, maybe it's stored but not shown in that special section? or maybe blocked?
-        //
-        // I will assume:
-        // 1. We check if the syncing user is in the Allowed list. If not, maybe we don't sync or we just don't display?
-        //    Let's enforce: Only Allowed Emails can sync. (Stronger control).
-        //    OR, just let them sync but the UI only shows the Allowed ones.
-        //    The user said: "add mail ... from which data comes".
-        //    I'll add a check in `syncImages`: if `req.user.email` is NOT in `AllowedEmail`, reject sync.
-
-        const uploaderEmail = req.user.email.toLowerCase();
-        if (!allowedEmailsList.includes(uploaderEmail)) {
-          console.log(`User ${uploaderEmail} is not in allowed list. Skipping sync.`);
-          // We can either error or just return. Redirecting to home seems safest.
-          return res.redirect(`${process.env.FRONTEND_URL}/home?error=unauthorized_email`);
-        }
-
         const exists = await Image.findOne({ fileId: file.id });
         if (exists) continue;
 
@@ -163,7 +121,7 @@ const syncImages = async (req, res) => {
           latitude,
           longitude,
           timestamp,
-          uploadedBy: req.user.email,
+          uploadedBy: uploaderEmail, // ✅ Store as lowercase
           lastCheckedAt: new Date(),
           ...placeDetails
         });
@@ -172,7 +130,7 @@ const syncImages = async (req, res) => {
       }
     }
 
-    res.redirect(`${process.env.FRONTEND_URL}/home`);
+    res.redirect(redirectUrl);
   } catch (err) {
     console.error('❌ Sync error:', err);
     res.status(500).send('Failed to sync images');
