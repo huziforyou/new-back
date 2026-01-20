@@ -213,9 +213,28 @@ const getImageStatsByDay = async (req, res) => {
 const getImagesByUploadedBy = async (req, res) => {
   try {
     const { uploadedBy } = req.params;
-    const photos = await Image.find({ uploadedBy }).select('-imageData');
+
+    // 1. Check if user is authenticated
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { user } = req;
+
+    // 2. Check permissions
+    // Admin has access to everything.
+    // Regular users must have the 'uploadedBy' email in their permissions.
+    if (user.role !== 'admin') {
+      const hasPermission = user.permissions && user.permissions.includes(uploadedBy.toLowerCase());
+      if (!hasPermission) {
+        return res.status(403).json({ error: 'Access denied: You do not have permission to view these images.' });
+      }
+    }
+
+    const photos = await Image.find({ uploadedBy: uploadedBy.toLowerCase() }).select('-imageData');
     res.status(200).json({ photos });
   } catch (err) {
+    console.error("Error in getImagesByUploadedBy:", err);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
