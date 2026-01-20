@@ -37,10 +37,7 @@ const {
   getPhotos,
   getImageDataById, // ✅ Import the new function
   getImageStatsByMonth,
-  getImagesByUploadedBy,
-  getFirstEmailImage,
-  getSecondEmailImage,
-  getThirdEmailImage
+  getImagesByUploadedBy
 } = require('../controllers/photo.controller');
 
 // ✅ SYNC IMAGES FROM DRIVE AND SAVE IN DB
@@ -55,8 +52,5 @@ router.get('/image-data/:id', getImageDataById);
 // ✅ STATS AND OTHER ROUTES
 router.get('/get-image-by-month', getImageStatsByMonth);
 router.get('/getImages/:uploadedBy', getImagesByUploadedBy);
-router.get('/get1stEmailPhotos', getFirstEmailImage);
-router.get('/get2ndEmailPhotos', getSecondEmailImage);
-router.get('/get3rdEmailPhotos', getThirdEmailImage);
 
 module.exports = router;

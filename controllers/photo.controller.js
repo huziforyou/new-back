@@ -1,7 +1,7 @@
 
 const axios = require('axios');
 const exifr = require('exifr');
-const exifr = require('exifr');
+
 const Image = require('../models/Image.model');
 const AllowedEmail = require('../models/AllowedEmail.model');
 

@@ -19,9 +19,19 @@ dotenv.config();
 // However, since we refactored db.js to return a promise, we should probably await it or let endpoints handle it.
 // For now, I will keep it global but inside a try-catch equivalent or just let it start async. 
 // Actually, with the new db.js, we can just call it.
-connectDB();
+// connectDB();
 
 const app = express();
+
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error("Database connection failed:", error);
+    res.status(500).json({ error: "Database connection failed" });
+  }
+});
 
 // Middlewares
 app.use(cors({
